@@ -12,7 +12,7 @@ class Blockchain(object):
         self.current_transactions = []
         
         # Create the genesis block
-        self.new_block(previous_hash="I'm a teapot.", proof=100)
+        self.new_block(previous_hash="Help! I need somebody", proof=100)
 
     def new_block(self, proof, previous_hash=None):
         """
@@ -94,9 +94,10 @@ class Blockchain(object):
         correct number of leading zeroes.
         :return: True if the resulting hash is a valid proof, False otherwise
         """
+        block_string = blockchain.last_block
+        block_string = json.dumps(block_string, sort_keys=True)
         guess = f'{block_string}{proof}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
-
         return guess_hash[:6] == "000000"
 
 
@@ -108,35 +109,29 @@ node_identifier = str(uuid4()).replace('-', '')
 
 # Instantiate the Blockchain
 blockchain = Blockchain()
-print(blockchain.chain)
-print(blockchain.hash(blockchain.last_block))
+
 
 @app.route('/mine', methods=['POST'])
 def mine():
     data = request.get_json()
-    if data['proof'] is None and data['id'] is None:
-        return jsonify({'message': "You failed to send the proof or id with your request"}),400
 
-    block_string = json.dumps(blockchain.last_block, sort_keys=True)
-
-    valid_proof = blockchain.valid_proof(block_string, data['proof'])
-    if valid_proof:
-        last_block = blockchain.last_block
-        previous_hash = blockchain.hash(last_block)
-        new_block = blockchain.new_block(data['proof'], previous_hash)
-
+    if 'proof' not in data or 'id' not in data:
         response = {
-            'message': "New Block Forged",
-            'index': new_block['index'],
-            'timestamp': new_block['timestamp'],
-            'transaction': new_block['transactions'],
-            'proof': new_block['proof'],
-            'previous_hash': new_block['previous_hash']
+            'message': "Failed to send proof or id"
         }
-        return jsonify(response), 200
-    else:
-        return jsonify({'message': "Proof is not true"}), 400
+        return jsonify(response), 400
 
+    result = blockchain.valid_proof(data['proof'])
+
+    if result is True:
+        blockchain.new_block(data['proof'])
+        return jsonify({'message': "New Block Forged"}), 200
+    else:
+        return jsonify({'message': "Incorrect proof"}), 400
+
+@app.route('/last_block', methods=['GET'])
+def last_block_endpoint():
+    return jsonify(blockchain.last_block), 200
 
 @app.route('/chain', methods=['GET'])
 def full_chain():
@@ -147,14 +142,7 @@ def full_chain():
     }
     return jsonify(response), 200
 
-@app.route('/last_block', methods=['GET'])
-def last_block():
-    response = {
-        'last_block': blockchain.last_block
-    }
-    return jsonify(response), 200
-
 
 # Run the program on port 5000
 if __name__ == '__main__':
-    app.run(host='localhost', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

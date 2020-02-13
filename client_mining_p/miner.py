@@ -1,10 +1,11 @@
 import hashlib
 import requests
-import time
+from time import time
 import sys
 import json
 
 
+coins = 0
 def proof_of_work(block):
     """
     Simple Proof of Work Algorithm
@@ -13,10 +14,14 @@ def proof_of_work(block):
     in an effort to find a number that is a valid proof
     :return: A valid proof for the provided block
     """
-    block_string = json.dumps(block)
+    print("Go mining go!")
+    start_time = time()
+    block_string = json.dumps(block, sort_keys=True)
     proof = 0
     while valid_proof(block_string, proof) is False:
         proof += 1
+    end_time = time()
+    print("Proof found")
     return proof
 
 
@@ -33,7 +38,7 @@ def valid_proof(block_string, proof):
     """
     guess = f"{block_string}{proof}".encode()
     guess_hash = hashlib.sha256(guess).hexdigest()
-    return guess_hash[:3] == "000"
+    return guess_hash[:6] == "000000"
 
 
 if __name__ == '__main__':
@@ -49,7 +54,6 @@ if __name__ == '__main__':
     print("ID is", id)
     f.close()
 
-    coins = 0
 
     # Run forever until interrupted
     while True:
@@ -66,7 +70,7 @@ if __name__ == '__main__':
             break
 
         # TODO: Get the block from `data` and use it to look for a new proof
-        # new_proof = ???
+        new_proof = proof_of_work(data)
 
         # When found, POST it to the server {"proof": new_proof, "id": id}
         post_data = {"proof": new_proof, "id": id}
@@ -74,25 +78,11 @@ if __name__ == '__main__':
         r = requests.post(url=node + "/mine", json=post_data)
         data = r.json()
 
+
         # TODO: If the server responds with a 'message' 'New Block Forged'
         # add 1 to the number of coins mined and print it.  Otherwise,
         # print the message from the server.
-        last_block = data['last_block']
-
-        starting_time = time.time()
-        new_proof = proof_of_work(last_block)
-
-        post_data = {"proof": new_proof, "id": id}
-        print('Sending proof to server')
-        r = requests.post(url=node + "/mine", json=post_data)
-        data = r.json()
-
-        if data['message'] == "New Block Forged":
-            ending_time = time.time()
-            print(f"It took this long for the proof to valid: {ending_time - starting_time}")
-            print(data)
+        if data['message'] == 'New Block Forged':
             coins += 1
-        else:
-            ending_time = time.time()
             print(data['message'])
-            print(f"It too this long for proof to valid: {ending_time - starting_time}")
+            print(f"{coins} coins found!")
