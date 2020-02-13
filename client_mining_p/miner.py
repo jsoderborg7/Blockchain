@@ -1,6 +1,6 @@
 import hashlib
 import requests
-
+import time
 import sys
 import json
 
@@ -13,7 +13,11 @@ def proof_of_work(block):
     in an effort to find a number that is a valid proof
     :return: A valid proof for the provided block
     """
-    pass
+    block_string = json.dumps(block)
+    proof = 0
+    while valid_proof(block_string, proof) is False:
+        proof += 1
+    return proof
 
 
 def valid_proof(block_string, proof):
@@ -27,7 +31,9 @@ def valid_proof(block_string, proof):
     correct number of leading zeroes.
     :return: True if the resulting hash is a valid proof, False otherwise
     """
-    pass
+    guess = f"{block_string}{proof}".encode()
+    guess_hash = hashlib.sha256(guess).hexdigest()
+    return guess_hash[:3] == "000"
 
 
 if __name__ == '__main__':
@@ -43,8 +49,12 @@ if __name__ == '__main__':
     print("ID is", id)
     f.close()
 
+    coins = 0
+
     # Run forever until interrupted
     while True:
+        print("\nStarting mining!")
+        print(f"Number of coins mined = {coins}")
         r = requests.get(url=node + "/last_block")
         # Handle non-json response
         try:
@@ -67,4 +77,22 @@ if __name__ == '__main__':
         # TODO: If the server responds with a 'message' 'New Block Forged'
         # add 1 to the number of coins mined and print it.  Otherwise,
         # print the message from the server.
-        pass
+        last_block = data['last_block']
+
+        starting_time = time.time()
+        new_proof = proof_of_work(last_block)
+
+        post_data = {"proof": new_proof, "id": id}
+        print('Sending proof to server')
+        r = requests.post(url=node + "/mine", json=post_data)
+        data = r.json()
+
+        if data['message'] == "New Block Forged":
+            ending_time = time.time()
+            print(f"It took this long for the proof to valid: {ending_time - starting_time}")
+            print(data)
+            coins += 1
+        else:
+            ending_time = time.time()
+            print(data['message'])
+            print(f"It too this long for proof to valid: {ending_time - starting_time}")
