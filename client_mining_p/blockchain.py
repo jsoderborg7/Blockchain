@@ -83,7 +83,7 @@ class Blockchain(object):
         return self.chain[-1]
 
     @staticmethod
-    def valid_proof(block_string, proof):
+    def valid_proof(proof):
         """
         Validates the Proof:  Does hash(block_string, proof) contain 3
         leading zeroes?  Return true if the proof is valid
