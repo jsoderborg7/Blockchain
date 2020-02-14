@@ -4,15 +4,15 @@ from time import time
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
-
+from flask_cors import CORS
 
 class Blockchain(object):
     def __init__(self):
         self.chain = []
         self.current_transactions = []
-
+        
         # Create the genesis block
-        self.new_block(previous_hash="I'm a teapot.", proof=100)
+        self.new_block(previous_hash="Help! I need somebody", proof=100)
 
     def new_block(self, proof, previous_hash=None):
         """
@@ -44,23 +44,6 @@ class Blockchain(object):
         self.chain.append(block)
         # Return the new block
         return block
-
-    def new_transaction(self, sender, recipient, amount):
-        """
-        :param sender: <str> Address of the Recipient
-        :param recipient: <str> Address of the Recipient
-        :param amount: <int> Amount
-        :return: <int> The index of the `block` that will hold this transaction
-        """
-        transaction = {
-            'sender': sender,
-            'recipient': recipient,
-            'amount': amount
-        }
-
-        self.current_transactions.append(transaction)
-
-        return self.last_block['index'] + 1
 
     def hash(self, block):
         """
@@ -95,12 +78,21 @@ class Blockchain(object):
         # TODO: Return the hashed block string in hexadecimal format
         return hex_hash
 
+    def new_transaction(self, sender, recipient, amount):
+        transaction = {
+            'sender': sender,
+            'recipient': recipient,
+            'amount': amount
+        }
+        self.current_transactions.append(transaction)
+        return (len(self.chain) + 1)
+
     @property
     def last_block(self):
         return self.chain[-1]
 
     @staticmethod
-    def valid_proof(block_string, proof):
+    def valid_proof(proof):
         """
         Validates the Proof:  Does hash(block_string, proof) contain 3
         leading zeroes?  Return true if the proof is valid
@@ -111,77 +103,56 @@ class Blockchain(object):
         correct number of leading zeroes.
         :return: True if the resulting hash is a valid proof, False otherwise
         """
+        block_string = blockchain.last_block
+        block_string = json.dumps(block_string, sort_keys=True)
         guess = f'{block_string}{proof}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
-
-        return guess_hash[:3] == "000"
+        return guess_hash[:6] == "000000"
 
 
 # Instantiate our Node
 app = Flask(__name__)
+CORS(app)
 
 # Generate a globally unique address for this node
 node_identifier = str(uuid4()).replace('-', '')
 
 # Instantiate the Blockchain
 blockchain = Blockchain()
-print(blockchain.chain)
-print(blockchain.hash(blockchain.last_block))
-
-@app.route('/transaction/new', methods=['POST'])
-def receive_new_transaction():
-    #     * use `request.get_json()` to pull the data out of the POST
-    # * check that 'sender', 'recipient', and 'amount' are present
-    #     * return a 400 error using `jsonify(response)` with a 'message'
-    # * upon success, return a 'message' indicating index of the block
-    #   containing the transaction
-    data = request.get_json()
-
-    required = ['sender', 'recipient', 'amount']
-    if not all(k in data for k in required):
-        # TODO Better error messaging
-        return "Missing values", 400
-
-    index = blockchain.new_transaction(data['sender'],
-                                       data['recipient'],
-                                       data['amount'])
-
-    response = {'message': f'Transactions will be included in block {index}'}
-    return jsonify(response), 200
 
 
 @app.route('/mine', methods=['POST'])
 def mine():
     data = request.get_json()
 
-    # Run the proof of work algorithm to get the next proof
-    proof = data['proof']
-
-    last_block = blockchain.last_block
-    last_block_string = json.dumps(last_block, sort_keys=True)
-
-    if blockchain.valid_proof(last_block_string, proof):
-        # Forge the new Block by adding it to the chain with the proof
-        previous_hash = blockchain.hash(blockchain.last_block)
-
-        block_index = blockchain.new_transaction(0, data['id'], 1)
-
-        new_block = blockchain.new_block(proof, previous_hash)
-
+    if 'proof' not in data or 'id' not in data:
         response = {
-            # TODO: Send a JSON response with the new block
-            "block": new_block,
-            "reward": f"Reward paid in block {block_index}"
+            'message': "Failed to send proof or id"
         }
+        return jsonify(response), 400
 
-        return jsonify(response), 200
+    result = blockchain.valid_proof(data['proof'])
+
+    if result is True:
+        blockchain.new_block(data['proof'])
+        return jsonify({'message': "New Block Forged"}), 200
     else:
-        response = {
-            "message": "Bad proof"
-        }
+        return jsonify({'message': "Incorrect proof"}), 400
 
-        return jsonify(response), 200
+@app.route('/transactions/new', methods=['POST'])
+def add_new_transaction():
+    data = request.get_json()
+    if 'sender' not in data or 'amount' not in data or 'recipient' not in data:
+        return jsonify({'message': "Missing fields"}), 400
+    index = blockchain.new_transaction(data['sender'], data['recipient'], data['amount'])
+    response = {
+        "message": f"Successful transaction at index {index}"
+    }
+    return jsonify(response), 200
 
+@app.route('/last_block', methods=['GET'])
+def last_block_endpoint():
+    return jsonify(blockchain.last_block), 200
 
 @app.route('/chain', methods=['GET'])
 def full_chain():
@@ -192,13 +163,7 @@ def full_chain():
     }
     return jsonify(response), 200
 
-@app.route('/last_block', methods=['GET'])
-def last_block():
-    response = {
-        'last_block': blockchain.last_block
-    }
-    return jsonify(response), 200
 
 # Run the program on port 5000
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
